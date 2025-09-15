@@ -33,107 +33,9 @@ def ensure_dirs(io: ExperimentIO) -> None:
     os.makedirs(io.results_dir, exist_ok=True)
 
 
-# =============================
-# 2D problem definition
-# =============================
-
-
-class TwoDProblem:
-    def __init__(self):
-        self.input_dim = 2
-
-    def init_network(self, m: int) -> Tuple[np.ndarray, np.ndarray]:
-        weights_raw = np.random.randn(m, self.input_dim)
-        weights = weights_raw / np.linalg.norm(weights_raw, axis=1)[:, np.newaxis]
-        biases = np.random.uniform(-2, 2, m)
-        return weights, biases
-
-    @staticmethod
-    def phi(weights: np.ndarray, biases: np.ndarray, xy: np.ndarray) -> np.ndarray:
-        return np.maximum(0.0, weights.dot(xy) + biases)
-
-    @staticmethod
-    def neural_net(theta: np.ndarray, features: np.ndarray) -> float:
-        return float(np.sum(theta * features))
-
-    def sample_p(self) -> np.ndarray:
-        while True:
-            x = np.random.multivariate_normal(mean=np.zeros(self.input_dim), cov=np.eye(self.input_dim))
-            if np.all(np.abs(x) <= 2):
-                return x
-
-    def sample_q(self) -> np.ndarray:
-        return np.random.uniform(-2, 2, self.input_dim)
-
-    def update_step(self, theta: np.ndarray, z: float, zeta: Tuple[np.ndarray, np.ndarray], alpha: float, r: float,
-                    weights: np.ndarray, biases: np.ndarray) -> Tuple[np.ndarray, float]:
-        x_p, x_q = zeta
-        phi_p = self.phi(weights, biases, x_p)
-        phi_q = self.phi(weights, biases, x_q)
-        f_q = self.neural_net(theta, phi_q)
-        log_z = float(np.log(max(z, 1e-12)))
-        log_one_minus_alpha = np.log1p(-alpha) if alpha < 1.0 else -np.inf
-        log_alpha = np.log(alpha) if alpha > 0.0 else -np.inf
-        log_z_new = np.logaddexp(log_one_minus_alpha + log_z, log_alpha + f_q)
-        log_z_new = float(np.clip(log_z_new, -40.0, 40.0))
-        z_new = float(np.exp(log_z_new))
-        scale = float(np.exp(np.clip(f_q - log_z_new, -20.0, 20.0)))
-        theta = theta + alpha * r * (phi_p - scale * phi_q)
-        bound = 10.0 / np.sqrt(len(theta))
-        theta = np.clip(theta, -bound, bound)
-        return theta, z_new
-
-    def approximate_kl_dv(self, theta: np.ndarray, its: int, weights: np.ndarray, biases: np.ndarray) -> float:
-        first_term_samples = []
-        f_q_samples = []
-        for _ in range(its):
-            x_p = self.sample_p()
-            x_q = self.sample_q()
-            first_term_samples.append(self.neural_net(theta, self.phi(weights, biases, x_p)))
-            f_q_samples.append(self.neural_net(theta, self.phi(weights, biases, x_q)))
-        first_term = float(np.mean(first_term_samples))
-        f_q_array = np.asarray(f_q_samples, dtype=np.float64)
-        f_q_max = float(np.max(f_q_array))
-        log_second_term = f_q_max + float(np.log(np.mean(np.exp(f_q_array - f_q_max))))
-        return float(first_term - log_second_term)
-
-    def estimate_true_kl(self, num_samples: int = 200000) -> float:
-        d = self.input_dim
-        test_samples = np.random.multivariate_normal(mean=np.zeros(d), cov=np.eye(d), size=1000000)
-        in_cube = np.all(np.abs(test_samples) <= 2, axis=1)
-        prob_in_cube = np.mean(in_cube)
-        log_gauss_const = -0.5 * d * np.log(2 * np.pi)
-        log_q_uniform = -d * np.log(4.0)
-        log_p0_vals = []
-        for _ in range(num_samples):
-            x = self.sample_p()
-            log_p0 = log_gauss_const - 0.5 * float(np.sum(x ** 2))
-            log_p0_vals.append(log_p0)
-        e_log_p0 = float(np.mean(log_p0_vals))
-        return float(e_log_p0 - log_q_uniform - np.log(prob_in_cube))
-
-    def estimate_mutual_info_sklearn(self, num_samples: int = 30000) -> Tuple[float, np.ndarray]:
-        # Build a dataset to distinguish p vs q; use MI(X;D) as a baseline
-        samples_p = []
-        samples_q = []
-        for _ in range(num_samples):
-            samples_p.append(self.sample_p())
-            samples_q.append(self.sample_q())
-        X = np.vstack([np.array(samples_p), np.array(samples_q)])
-        y = np.hstack([np.zeros(len(samples_p)), np.ones(len(samples_q))])
-        mi_scores = mutual_info_regression(X, y, random_state=42)
-        total_mi = float(np.sum(mi_scores))
-        return total_mi, mi_scores
-
-
-# =============================
-# 5D problem definition (I(X;D) with X in R^5 and D in {0,1})
-# =============================
-
-
-class FiveDProblem:
-    def __init__(self):
-        self.input_dim = 5
+class KLProblem:
+    def __init__(self, input_dim: int):
+        self.input_dim = input_dim
 
     def init_network(self, m: int) -> Tuple[np.ndarray, np.ndarray]:
         weights_raw = np.random.randn(m, self.input_dim)
@@ -145,10 +47,6 @@ class FiveDProblem:
     def phi(weights: np.ndarray, biases: np.ndarray, x: np.ndarray) -> np.ndarray:
         return np.maximum(0.0, weights.dot(x) + biases)
 
-    @staticmethod
-    def neural_net(theta: np.ndarray, features: np.ndarray) -> float:
-        return float(np.sum(theta * features))
-
     def sample_p(self) -> np.ndarray:
         while True:
             x = np.random.multivariate_normal(mean=np.zeros(self.input_dim), cov=np.eye(self.input_dim))
@@ -163,18 +61,11 @@ class FiveDProblem:
         x_p, x_q = zeta
         phi_p = self.phi(weights, biases, x_p)
         phi_q = self.phi(weights, biases, x_q)
-        f_q = self.neural_net(theta, phi_q)
-        log_z = float(np.log(max(z, 1e-12)))
-        log_one_minus_alpha = np.log1p(-alpha) if alpha < 1.0 else -np.inf
-        log_alpha = np.log(alpha) if alpha > 0.0 else -np.inf
-        log_z_new = np.logaddexp(log_one_minus_alpha + log_z, log_alpha + f_q)
-        log_z_new = float(np.clip(log_z_new, -40.0, 40.0))
-        z_new = float(np.exp(log_z_new))
-        scale = float(np.exp(np.clip(f_q - log_z_new, -20.0, 20.0)))
-        theta = theta + alpha * r * (phi_p - scale * phi_q)
-        bound = 2e6 / np.sqrt(len(theta))
-        theta = np.clip(theta, -bound, bound)
-        return theta, z_new
+        theta_new = theta + alpha * r * (phi_p - 1/z * np.exp(np.sum(phi_q * theta)) * phi_q)
+        z_new = z + alpha * (np.exp(np.sum(phi_q * theta)) - z)
+        bound = 2e2 / np.sqrt(len(theta))
+        theta_new = np.clip(theta_new, -bound, bound)
+        return theta_new, z_new
 
     def approximate_kl_dv(self, theta: np.ndarray, its: int, weights: np.ndarray, biases: np.ndarray) -> float:
         first_term_samples = []
@@ -182,8 +73,8 @@ class FiveDProblem:
         for _ in range(its):
             x_p = self.sample_p()
             x_q = self.sample_q()
-            first_term_samples.append(self.neural_net(theta, self.phi(weights, biases, x_p)))
-            f_q_samples.append(self.neural_net(theta, self.phi(weights, biases, x_q)))
+            first_term_samples.append(np.sum(theta * self.phi(weights, biases, x_p)))
+            f_q_samples.append(np.sum(theta * self.phi(weights, biases, x_q)))
         first_term = float(np.mean(first_term_samples))
         f_q_array = np.asarray(f_q_samples, dtype=np.float64)
         f_q_max = float(np.max(f_q_array))
@@ -206,7 +97,6 @@ class FiveDProblem:
         return float(e_log_p0 - log_q_uniform - np.log(prob_in_cube))
 
     def estimate_mutual_info_sklearn(self, num_samples: int = 30000) -> Tuple[float, np.ndarray]:
-        # Build a dataset to distinguish p vs q; use MI(X;D) as a baseline
         samples_p = []
         samples_q = []
         for _ in range(num_samples):
@@ -214,14 +104,9 @@ class FiveDProblem:
             samples_q.append(self.sample_q())
         X = np.vstack([np.array(samples_p), np.array(samples_q)])
         y = np.hstack([np.zeros(len(samples_p)), np.ones(len(samples_q))])
-        mi_scores = mutual_info_classif(X, y, random_state=42)
+        mi_scores = mutual_info_regression(X, y, random_state=42)
         total_mi = float(np.sum(mi_scores))
         return total_mi, mi_scores
-
-
-# =============================
-# Unified sweep runner
-# =============================
 
 
 def _sweep_vary_T(problem, config: SweepConfig, io: ExperimentIO,
@@ -316,9 +201,6 @@ def _sweep_vary_m(problem, config: SweepConfig, io: ExperimentIO,
     return results_m
 
 
-# =============================
-# Public API
-# =============================
 
 
 def make_default_config_2d() -> SweepConfig:
@@ -348,13 +230,13 @@ def make_default_config_5d() -> SweepConfig:
 def run_experiment_2d(io: ExperimentIO, config: SweepConfig, rerun: bool) -> Tuple[Dict, Dict]:
     ensure_dirs(io)
     label_prefix = 'results_2d'
-    problem = TwoDProblem()
+    problem = KLProblem(2)
 
     def run_exp(m: int, T: int, its_eval: int, true_mi: float) -> float:
         weights, biases = problem.init_network(m)
-        r = 1.0 / m
-        alpha = T ** (-1 / 3)
-        theta = np.random.randn(m) / m
+        r = 1 / m
+        alpha = T ** (-2 / 3)
+        theta = np.random.uniform(-2e2/np.sqrt(m), 2e2/np.sqrt(m), m)
         z = 1.0
         for _ in range(T):
             zeta = (problem.sample_p(), problem.sample_q())
@@ -379,13 +261,13 @@ def run_experiment_2d(io: ExperimentIO, config: SweepConfig, rerun: bool) -> Tup
 def run_experiment_5d(io: ExperimentIO, config: SweepConfig, rerun: bool) -> Tuple[Dict, Dict]:
     ensure_dirs(io)
     label_prefix = 'results_5d'
-    problem = FiveDProblem()
+    problem = KLProblem(5)
 
     def run_exp(m: int, T: int, its_eval: int, true_mi: float) -> float:
         weights, biases = problem.init_network(m)
-        r = 1.0 / m
-        alpha = T ** (-1 / 3)
-        theta = np.random.randn(m) / m
+        r = 1 / m
+        alpha = T ** (-2 / 3)
+        theta = np.random.uniform(-2e2/np.sqrt(m), 2e2/np.sqrt(m), m)
         z = 1.0
         for _ in range(T):
             zeta = (problem.sample_p(), problem.sample_q())
@@ -394,7 +276,6 @@ def run_experiment_5d(io: ExperimentIO, config: SweepConfig, rerun: bool) -> Tup
         return abs(float(true_mi) - float(kl_estimate))
 
     if rerun:
-        # Compute once
         true_kl = problem.estimate_true_kl()
         sklearn_mi_sum, _ = problem.estimate_mutual_info_sklearn(num_samples=30000)
         results_T = _sweep_vary_T(problem, config, io, run_exp, label_prefix, true_kl, sklearn_mi_sum)
@@ -403,11 +284,6 @@ def run_experiment_5d(io: ExperimentIO, config: SweepConfig, rerun: bool) -> Tup
         results_T, results_m = load_latest_cached(io.raw_dir, label_prefix)
     inject_metadata(results_T, results_m)
     return results_T, results_m
-
-
-# =============================
-# Caching helpers and metadata injection
-# =============================
 
 
 def load_latest_cached(raw_dir: str, label_prefix: str) -> Tuple[Dict, Dict]:
