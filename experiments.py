@@ -1,6 +1,5 @@
 import os
 import time
-import math
 import pickle
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Tuple
@@ -61,9 +60,13 @@ class KLProblem:
         x_p, x_q = zeta
         phi_p = self.phi(weights, biases, x_p)
         phi_q = self.phi(weights, biases, x_q)
-        theta_new = theta + alpha * r * (phi_p - 1/z * np.exp(np.sum(phi_q * theta)) * phi_q)
-        z_new = z + alpha * (np.exp(np.sum(phi_q * theta)) - z)
-        bound = 2e2 / np.sqrt(len(theta))
+        z = np.clip(z, 1e-5, 1e5)
+        exp_term = np.exp(np.sum(phi_q * theta))
+
+        grad_term = phi_p - (exp_term / z) * phi_q
+        theta_new = theta + alpha * r * grad_term
+        z_new = z + alpha * (exp_term - z)
+        bound = 2e1 / np.sqrt(len(theta))
         theta_new = np.clip(theta_new, -bound, bound)
         return theta_new, z_new
 
@@ -121,7 +124,7 @@ def _sweep_vary_T(problem, config: SweepConfig, io: ExperimentIO,
 
     for T in Ts:
         T_errors: List[float] = []
-        for run_idx in range(config.runs_per_setting_T):
+        for run_idx in tqdm(range(config.runs_per_setting_T), desc=f'Running the T={T} setting'):
             err = run_exp_fn(m_fixed, T, config.its_eval, true_mi)
             if not np.isnan(err):
                 T_errors.append(float(err))
@@ -167,7 +170,7 @@ def _sweep_vary_m(problem, config: SweepConfig, io: ExperimentIO,
 
     for m_val in ms:
         m_errors: List[float] = []
-        for run_idx in range(config.runs_per_setting_m):
+        for run_idx in tqdm(range(config.runs_per_setting_m), desc=f'Running the m={m_val} setting'):
             err = run_exp_fn(m_val, T_fixed, config.its_eval, true_mi)
             if not np.isnan(err):
                 m_errors.append(float(err))
@@ -205,25 +208,25 @@ def _sweep_vary_m(problem, config: SweepConfig, io: ExperimentIO,
 
 def make_default_config_2d() -> SweepConfig:
     return SweepConfig(
-        vary_T_values=[100, 500, 1000, 5000, 10000],
-        vary_m_values=[10, 50, 100, 500, 1000, 5000],
-        fixed_m_for_T=1000,
-        fixed_T_for_m=5000,
-        runs_per_setting_T=10,
-        runs_per_setting_m=10,
-        its_eval=5000,
+        vary_T_values=[100, 500, 1_000, 5_000, 10_000],
+        vary_m_values=[10, 50, 100, 500, 1_000],
+        fixed_m_for_T=100,
+        fixed_T_for_m=10_000,
+        runs_per_setting_T=50,
+        runs_per_setting_m=50,
+        its_eval=5_000,
     )
 
 
 def make_default_config_5d() -> SweepConfig:
     return SweepConfig(
-        vary_T_values=[10, 50, 100, 500, 1000, 5000, 10_000, 50_000, 100_000],
-        vary_m_values=[1, 5, 10, 50, 100, 500, 1000, 5000],
+        vary_T_values=[100, 500, 1_000, 5_000, 10_000, 50_000, 100_000],
+        vary_m_values=[10, 50, 100, 500, 1_000, 5_000],
         fixed_m_for_T=500,
-        fixed_T_for_m=500000,
-        runs_per_setting_T=10,
-        runs_per_setting_m=10,
-        its_eval=5000,
+        fixed_T_for_m=500_000,
+        runs_per_setting_T=50,
+        runs_per_setting_m=50,
+        its_eval=5_000,
     )
 
 
@@ -236,7 +239,7 @@ def run_experiment_2d(io: ExperimentIO, config: SweepConfig, rerun: bool) -> Tup
         weights, biases = problem.init_network(m)
         r = 1 / m
         alpha = T ** (-2 / 3)
-        theta = np.random.uniform(-2e2/np.sqrt(m), 2e2/np.sqrt(m), m)
+        theta = np.zeros(m)
         z = 1.0
         for _ in range(T):
             zeta = (problem.sample_p(), problem.sample_q())
@@ -245,13 +248,11 @@ def run_experiment_2d(io: ExperimentIO, config: SweepConfig, rerun: bool) -> Tup
         return abs(float(true_mi) - float(kl_estimate))
 
     if rerun:
-        # Compute once
         true_kl = problem.estimate_true_kl()
         sklearn_mi_sum, _ = problem.estimate_mutual_info_sklearn(num_samples=30000)
         results_T = _sweep_vary_T(problem, config, io, run_exp, label_prefix, true_kl, sklearn_mi_sum)
         results_m = _sweep_vary_m(problem, config, io, run_exp, label_prefix, true_kl, sklearn_mi_sum)
     else:
-        # Load latest cached
         results_T, results_m = load_latest_cached(io.raw_dir, label_prefix)
     # augment with metadata needed by plotting utils
     inject_metadata(results_T, results_m)
@@ -267,7 +268,7 @@ def run_experiment_5d(io: ExperimentIO, config: SweepConfig, rerun: bool) -> Tup
         weights, biases = problem.init_network(m)
         r = 1 / m
         alpha = T ** (-2 / 3)
-        theta = np.random.uniform(-2e2/np.sqrt(m), 2e2/np.sqrt(m), m)
+        theta = np.zeros(m, dtype=float)
         z = 1.0
         for _ in range(T):
             zeta = (problem.sample_p(), problem.sample_q())
@@ -302,8 +303,6 @@ def load_latest_cached(raw_dir: str, label_prefix: str) -> Tuple[Dict, Dict]:
 
 
 def inject_metadata(results_T: Dict, results_m: Dict) -> None:
-    # Derive consistent fields used by existing plotting scripts
-    # Add placeholders for sklearn baseline if not present (kept for compatible legend lines)
     if 'm_fixed' not in results_T and 'ms' in results_m and len(results_m['ms']) > 0:
         results_T['m_fixed'] = results_m['ms'][0]
     if 'T_fixed' not in results_m and 'Ts' in results_T and len(results_T['Ts']) > 0:
