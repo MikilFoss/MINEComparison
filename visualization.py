@@ -20,6 +20,7 @@ def plot_varying_T(data_T: Dict, results_dir: str, dim_label: str) -> str:
     timestamp = data_T.get('timestamp', 'latest')
     m_fixed = data_T.get('m_fixed', None)
     true_mi = float(data_T.get('true_mi', 0.0))
+    true_js = float(data_T.get('true_js', true_mi))
     sklearn_mi = float(data_T.get('sklearn_mi_sum_features', 0.0))
     num_runs = _infer_num_runs(data_T.get('raw_results', []))
 
@@ -43,8 +44,8 @@ def plot_varying_T(data_T: Dict, results_dir: str, dim_label: str) -> str:
     ax.set_xlabel('Number of iterations (T)')
     ax.set_ylabel(r'$|D_{KL}^{\mathrm{true}} - D_{KL}^{\mathrm{approx}}|$')
 
-    # Baseline line
-    baseline = abs(true_mi - sklearn_mi)
+    # Baseline line: compare sklearn MI against true JS (I(X;Y)) if available
+    baseline = abs(true_js - sklearn_mi)
     if baseline > 0:
         ax.axhline(y=baseline, color='red', linestyle='--', label='Sklearn MI baseline')
 
@@ -67,6 +68,7 @@ def plot_varying_m(data_m: Dict, results_dir: str, dim_label: str) -> str:
     timestamp = data_m.get('timestamp', 'latest')
     T_fixed = data_m.get('T_fixed', None)
     true_mi = float(data_m.get('true_mi', 0.0))
+    true_js = float(data_m.get('true_js', true_mi))
     sklearn_mi = float(data_m.get('sklearn_mi_sum_features', 0.0))
     num_runs = _infer_num_runs(data_m.get('raw_results', []))
 
@@ -90,7 +92,7 @@ def plot_varying_m(data_m: Dict, results_dir: str, dim_label: str) -> str:
     ax.set_xlabel('Number of neurons (m)')
     ax.set_ylabel(r'$|D_{KL}^{\mathrm{true}} - D_{KL}^{\mathrm{approx}}|$')
 
-    baseline = abs(true_mi - sklearn_mi)
+    baseline = abs(true_js - sklearn_mi)
     if baseline > 0:
         ax.axhline(y=baseline, color='blue', linestyle='--', label='Sklearn MI baseline')
 

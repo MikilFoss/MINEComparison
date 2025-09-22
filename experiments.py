@@ -6,7 +6,7 @@ from typing import Callable, Dict, List, Tuple
 
 import numpy as np
 from tqdm import tqdm
-from sklearn.feature_selection import mutual_info_regression
+from sklearn.feature_selection import mutual_info_classif
 
 
 
@@ -99,7 +99,41 @@ class KLProblem:
         e_log_p0 = float(np.mean(log_p0_vals))
         return float(e_log_p0 - log_q_uniform - np.log(prob_in_cube))
 
-    def estimate_mutual_info_sklearn(self, num_samples: int = 30000) -> Tuple[float, np.ndarray]:
+    def estimate_true_js(self, num_samples: int = 200000) -> float:
+        d = self.input_dim
+        # Compute normalization for truncated Gaussian
+        test_samples = np.random.multivariate_normal(mean=np.zeros(d), cov=np.eye(d), size=1000000)
+        in_cube = np.all(np.abs(test_samples) <= 2, axis=1)
+        prob_in_cube = np.mean(in_cube)
+
+        log_gauss_const = -0.5 * d * np.log(2 * np.pi)
+        log_q_uniform = -d * np.log(4.0)
+
+        # KL(P || M) where M = 0.5 P + 0.5 Q
+        diffs_p = []
+        for _ in range(num_samples):
+            x = self.sample_p()
+            log_p = log_gauss_const - 0.5 * float(np.sum(x ** 2)) - np.log(prob_in_cube)
+            log_q = log_q_uniform
+            m_max = max(log_p, log_q)
+            log_m = m_max + np.log(0.5 * np.exp(log_p - m_max) + 0.5 * np.exp(log_q - m_max))
+            diffs_p.append(log_p - log_m)
+        dkl_p_m = float(np.mean(diffs_p))
+
+        # KL(Q || M)
+        diffs_q = []
+        for _ in range(num_samples):
+            x = self.sample_q()
+            log_p = log_gauss_const - 0.5 * float(np.sum(x ** 2)) - np.log(prob_in_cube)
+            log_q = log_q_uniform
+            m_max = max(log_p, log_q)
+            log_m = m_max + np.log(0.5 * np.exp(log_p - m_max) + 0.5 * np.exp(log_q - m_max))
+            diffs_q.append(log_q - log_m)
+        dkl_q_m = float(np.mean(diffs_q))
+
+        return float(0.5 * (dkl_p_m + dkl_q_m))
+
+    def estimate_mutual_info_sklearn(self, num_samples: int = 30000, n_neighbors: int = 10) -> Tuple[float, np.ndarray]:
         samples_p = []
         samples_q = []
         for _ in range(num_samples):
@@ -107,7 +141,7 @@ class KLProblem:
             samples_q.append(self.sample_q())
         X = np.vstack([np.array(samples_p), np.array(samples_q)])
         y = np.hstack([np.zeros(len(samples_p)), np.ones(len(samples_q))])
-        mi_scores = mutual_info_regression(X, y, random_state=42)
+        mi_scores = mutual_info_classif(X, y, discrete_features=False, n_neighbors=n_neighbors, random_state=42)
         total_mi = float(np.sum(mi_scores))
         return total_mi, mi_scores
 
@@ -249,9 +283,12 @@ def run_experiment_2d(io: ExperimentIO, config: SweepConfig, rerun: bool) -> Tup
 
     if rerun:
         true_kl = problem.estimate_true_kl()
-        sklearn_mi_sum, _ = problem.estimate_mutual_info_sklearn(num_samples=30000)
+        true_js = problem.estimate_true_js()
+        sklearn_mi_sum, _ = problem.estimate_mutual_info_sklearn(num_samples=60000, n_neighbors=10)
         results_T = _sweep_vary_T(problem, config, io, run_exp, label_prefix, true_kl, sklearn_mi_sum)
         results_m = _sweep_vary_m(problem, config, io, run_exp, label_prefix, true_kl, sklearn_mi_sum)
+        results_T['true_js'] = float(true_js)
+        results_m['true_js'] = float(true_js)
     else:
         results_T, results_m = load_latest_cached(io.raw_dir, label_prefix)
     # augment with metadata needed by plotting utils
@@ -278,9 +315,12 @@ def run_experiment_5d(io: ExperimentIO, config: SweepConfig, rerun: bool) -> Tup
 
     if rerun:
         true_kl = problem.estimate_true_kl()
-        sklearn_mi_sum, _ = problem.estimate_mutual_info_sklearn(num_samples=30000)
+        true_js = problem.estimate_true_js()
+        sklearn_mi_sum, _ = problem.estimate_mutual_info_sklearn(num_samples=60000, n_neighbors=10)
         results_T = _sweep_vary_T(problem, config, io, run_exp, label_prefix, true_kl, sklearn_mi_sum)
         results_m = _sweep_vary_m(problem, config, io, run_exp, label_prefix, true_kl, sklearn_mi_sum)
+        results_T['true_js'] = float(true_js)
+        results_m['true_js'] = float(true_js)
     else:
         results_T, results_m = load_latest_cached(io.raw_dir, label_prefix)
     inject_metadata(results_T, results_m)
