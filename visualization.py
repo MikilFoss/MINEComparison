@@ -27,7 +27,7 @@ def plot_varying_T(data_T: Dict, results_dir: str, dim_label: str) -> str:
     errors_T_array = np.array(errors_T)
     error_ses_T_array = np.array(error_stds_T) / np.sqrt(max(num_runs, 1))
 
-    fig, ax = plt.subplots(1, 1, figsize=(8, 2.24))
+    fig, ax = plt.subplots(1, 1, figsize=(6, 5.5))
     ax.plot(Ts, errors_T, 'bo-', label='Neural Network Method')
     if len(errors_T) == len(error_stds_T):
         ax.fill_between(
@@ -41,8 +41,12 @@ def plot_varying_T(data_T: Dict, results_dir: str, dim_label: str) -> str:
 
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_xlabel('Number of iterations (T)')
-    ax.set_ylabel(r'$|D_{KL}^{\mathrm{true}} - D_{KL}^{\mathrm{approx}}|$')
+    ax.set_xlabel('Number of iterations (T)', fontsize=14)
+    ax.set_ylabel(r'$|D_{KL}^{\mathrm{true}} - D_{KL}^{\mathrm{approx}}|$', fontsize=14)
+    
+    # Increase tick label font sizes
+    ax.tick_params(axis='both', which='major', labelsize=12)
+    ax.tick_params(axis='both', which='minor', labelsize=10)
 
     # Baseline line: compare sklearn MI against true JS (I(X;Y)) if available
     baseline = abs(true_js - sklearn_mi)
@@ -50,8 +54,8 @@ def plot_varying_T(data_T: Dict, results_dir: str, dim_label: str) -> str:
         ax.axhline(y=baseline, color='red', linestyle='--', label='Sklearn MI baseline')
 
     title_suffix = f' (fixed m = {m_fixed})' if m_fixed is not None else ''
-    ax.set_title(f'{dim_label}: Varying T{title_suffix}')
-    ax.legend(loc='upper left', bbox_to_anchor=(1.0, 1.0))
+    ax.set_title(f'{dim_label}: Varying T{title_suffix}', fontsize=16)
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), ncol=2, fontsize=12)
     ax.grid(True)
 
     plt.tight_layout()
@@ -75,7 +79,7 @@ def plot_varying_m(data_m: Dict, results_dir: str, dim_label: str) -> str:
     errors_m_array = np.array(errors_m)
     error_ses_m_array = np.array(error_stds_m) / np.sqrt(max(num_runs, 1))
 
-    fig, ax = plt.subplots(1, 1, figsize=(8, 2.24))
+    fig, ax = plt.subplots(1, 1, figsize=(6, 5.5))
     ax.plot(ms, errors_m, 'ro-', label='Neural Network Method')
     if len(errors_m) == len(error_stds_m):
         ax.fill_between(
@@ -89,16 +93,20 @@ def plot_varying_m(data_m: Dict, results_dir: str, dim_label: str) -> str:
 
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_xlabel('Number of neurons (m)')
-    ax.set_ylabel(r'$|D_{KL}^{\mathrm{true}} - D_{KL}^{\mathrm{approx}}|$')
+    ax.set_xlabel('Number of neurons (m)', fontsize=14)
+    ax.set_ylabel(r'$|D_{KL}^{\mathrm{true}} - D_{KL}^{\mathrm{approx}}|$', fontsize=14)
+    
+    # Increase tick label font sizes
+    ax.tick_params(axis='both', which='major', labelsize=12)
+    ax.tick_params(axis='both', which='minor', labelsize=10)
 
     baseline = abs(true_js - sklearn_mi)
     if baseline > 0:
         ax.axhline(y=baseline, color='blue', linestyle='--', label='Sklearn MI baseline')
 
     title_suffix = f' (fixed T = {T_fixed})' if T_fixed is not None else ''
-    ax.set_title(f'{dim_label}: Varying m{title_suffix}')
-    ax.legend(loc='upper left', bbox_to_anchor=(1.0, 1.0))
+    ax.set_title(f'{dim_label}: Varying m{title_suffix}', fontsize=16)
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), ncol=2, fontsize=12)
     ax.grid(True)
 
     plt.tight_layout()

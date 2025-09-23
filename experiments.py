@@ -254,12 +254,12 @@ def make_default_config_2d() -> SweepConfig:
 
 def make_default_config_5d() -> SweepConfig:
     return SweepConfig(
-        vary_T_values=[100, 500, 1_000, 5_000, 10_000, 50_000, 100_000],
+        vary_T_values=[100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000, 1_000_000, 5_000_000, 10_000_000, 50_000_000],
         vary_m_values=[10, 50, 100, 500, 1_000, 5_000],
-        fixed_m_for_T=500,
-        fixed_T_for_m=500_000,
-        runs_per_setting_T=50,
-        runs_per_setting_m=50,
+        fixed_m_for_T=100,
+        fixed_T_for_m=1_000_000,
+        runs_per_setting_T=10,
+        runs_per_setting_m=10,
         its_eval=5_000,
     )
 
