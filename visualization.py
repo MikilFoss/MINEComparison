@@ -55,7 +55,7 @@ def plot_varying_T(data_T: Dict, results_dir: str, dim_label: str) -> str:
 
     title_suffix = f' (fixed m = {m_fixed})' if m_fixed is not None else ''
     ax.set_title(f'{dim_label}: Varying T{title_suffix}', fontsize=16)
-    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), ncol=2, fontsize=12)
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=2, fontsize=12)
     ax.grid(True)
 
     plt.tight_layout()
@@ -106,7 +106,7 @@ def plot_varying_m(data_m: Dict, results_dir: str, dim_label: str) -> str:
 
     title_suffix = f' (fixed T = {T_fixed})' if T_fixed is not None else ''
     ax.set_title(f'{dim_label}: Varying m{title_suffix}', fontsize=16)
-    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), ncol=2, fontsize=12)
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=2, fontsize=12)
     ax.grid(True)
 
     plt.tight_layout()
