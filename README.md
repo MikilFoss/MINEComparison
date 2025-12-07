@@ -1,5 +1,5 @@
 # KL Divergence Estimation with Neural Networks
-
+Work for the paper: https://arxiv.org/pdf/2510.05386
 ## Installation
 
 Ensure you have the required dependencies:
